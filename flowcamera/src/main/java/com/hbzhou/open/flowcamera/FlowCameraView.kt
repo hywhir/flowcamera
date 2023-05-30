@@ -1,8 +1,6 @@
 package com.hbzhou.open.flowcamera
 
 import android.annotation.SuppressLint
-import android.content.ContentResolver
-import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
@@ -13,7 +11,6 @@ import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Build.VERSION_CODES.Q
-import android.provider.BaseColumns
 import android.provider.MediaStore
 import android.util.AttributeSet
 import android.util.Log
@@ -57,6 +54,9 @@ import java.util.concurrent.Executors
  * @email 1004695331@qq.com
  */
 class FlowCameraView : FrameLayout {
+    var saveToAlbum = true
+    var saveToPublic = true
+
     //闪关灯状态
     private val TYPE_FLASH_AUTO = 0x021
     private val TYPE_FLASH_ON = 0x022
@@ -94,7 +94,6 @@ class FlowCameraView : FrameLayout {
 
     private lateinit var container: FrameLayout
     private lateinit var viewFinder: PreviewView
-    private lateinit var outputDirectory: File
 
     private var displayId: Int = -1
     private var imageCapture: ImageCapture? = null
@@ -206,7 +205,8 @@ class FlowCameraView : FrameLayout {
 
     private fun getOutputDirectory(context: Context): File {
         val appContext = context.applicationContext
-        val mediaDir = context.externalMediaDirs.firstOrNull()?.let {
+        val dirs = if (saveToPublic) context.externalMediaDirs else context.externalCacheDirs
+        val mediaDir = dirs.firstOrNull()?.let {
             File(it, System.currentTimeMillis().toString()).apply { mkdirs() }
         }
         return if (mediaDir != null && mediaDir.exists())
@@ -270,9 +270,8 @@ class FlowCameraView : FrameLayout {
                 imageCapture?.let { imageCapture ->
 
                     // Create output file to hold the image
-                    photoFile = createFile(outputDirectory,
-                        FILENAME,
-                        PHOTO_EXTENSION)
+                    photoFile =
+                        createFile(getOutputDirectory(mContext!!), FILENAME, PHOTO_EXTENSION)
 
                     // Setup image capture metadata
                     val metadata = ImageCapture.Metadata().apply {
@@ -402,6 +401,7 @@ class FlowCameraView : FrameLayout {
      * @param dataFile
      */
     private fun scanPhotoAlbum(dataFile: File?) {
+        if (!saveToPublic || !saveToAlbum) return
         if (dataFile == null) {
             return
         }
@@ -595,8 +595,6 @@ class FlowCameraView : FrameLayout {
                         // Every time the orientation of device changes, update rotation for use cases
                         displayManager.registerDisplayListener(displayListener, null)
 
-                        // Determine the output directory
-                        outputDirectory = getOutputDirectory(mContext!!)
 
                         lifecycleOwner.lifecycleScope.launch {
                             if (enumerationDeferred != null) {
@@ -675,6 +673,27 @@ class FlowCameraView : FrameLayout {
 
     @SuppressLint("MissingPermission")
     private fun startRecording() {
+        if (!saveToPublic) {
+            val file = createFile(getOutputDirectory(mContext!!), FILENAME, VIDEO_EXTENSION)
+            if (file.parentFile?.exists() != true) {
+                file.parentFile?.mkdirs()
+            }
+            if (!file.exists()) {
+                file.createNewFile()
+            }
+            val fileOutputOptions = FileOutputOptions.Builder(file)
+                .build()
+            // configure Recorder and Start recording to the mediaStoreOutput.
+            currentRecording?.stop()
+            currentRecording = null
+            currentRecording = videoCapture.output
+                .prepareRecording(mContext!!, fileOutputOptions)
+                .apply { withAudioEnabled() }
+                .start(mainThreadExecutor, captureListener)
+            Log.i(TAG, "Recording started")
+            return
+        }
+
         // create MediaStoreOutputOptions for our recorder: resulting our recording!
         val name = "CameraX-recording-" +
                 SimpleDateFormat(FILENAME_FORMAT, Locale.CHINA)
@@ -682,9 +701,11 @@ class FlowCameraView : FrameLayout {
         val contentValues = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, name)
         }
+
         val mediaStoreOutput = MediaStoreOutputOptions.Builder(
             mContext!!.contentResolver,
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        )
             .setContentValues(contentValues)
             .build()
 
@@ -695,7 +716,6 @@ class FlowCameraView : FrameLayout {
             .prepareRecording(mContext!!, mediaStoreOutput)
             .apply { withAudioEnabled() }
             .start(mainThreadExecutor, captureListener)
-
         Log.i(TAG, "Recording started")
     }
 
@@ -708,7 +728,11 @@ class FlowCameraView : FrameLayout {
             recordingState = event
         if (event is VideoRecordEvent.Finalize) {
             // display the captured video
-            videoFile = getAbsolutePathFromUri(event.outputResults.outputUri)?.let { File(it) }
+            videoFile = if (saveToPublic) {
+                getAbsolutePathFromUri(event.outputResults.outputUri)?.let { File(it) }
+            } else {
+                event.outputResults.outputUri.path?.let { File(it) }
+            }
 
             startVideoPlayInit(event.outputResults.outputUri)
         }
