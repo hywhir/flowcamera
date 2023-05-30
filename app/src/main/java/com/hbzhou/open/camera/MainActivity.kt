@@ -1,6 +1,7 @@
 package com.hbzhou.open.camera
 
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.hbzhou.open.flowcamera.CustomCameraView.BUTTON_STATE_BOTH
@@ -17,6 +18,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         val flowCamera = findViewById<FlowCameraView>(R.id.flowCamera)
+        flowCamera.saveToAlbum = false
+        flowCamera.saveToPublic = false
         // 绑定生命周期 您就不用关心Camera的开启和关闭了 不绑定无法预览
         flowCamera.setBindToLifecycle(this)
         // 设置白平衡模式
@@ -32,6 +35,7 @@ class MainActivity : AppCompatActivity() {
         flowCamera.setFlowCameraListener(object : FlowCameraListener {
             // 录制完成视频文件返回
             override fun recordSuccess(file: File) {
+                Log.d("MainActivity", "record success:" + file.absolutePath)
                 Toast.makeText(this@MainActivity, file.absolutePath, Toast.LENGTH_SHORT).show()
                 finish()
             }
