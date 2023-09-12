@@ -499,6 +499,11 @@ class FlowCameraView : FrameLayout {
      */
     private fun stopVideoPlay() {
         currentRecording?.stop()
+        mMediaPlayer?.apply {
+            stop()
+            release()
+        }
+        mMediaPlayer = null
         mTextureView?.visibility = View.GONE
     }
 
