@@ -47,6 +47,10 @@ import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+import com.hbzhou.open.flowcamera.JCameraView.BUTTON_STATE_BOTH
+import com.hbzhou.open.flowcamera.JCameraView.BUTTON_STATE_ONLY_CAPTURE
+import com.hbzhou.open.flowcamera.JCameraView.BUTTON_STATE_ONLY_RECORDER
+
 
 /**
  * @author hb_zhou
@@ -63,6 +67,7 @@ class FlowCameraView : FrameLayout {
     private val TYPE_FLASH_OFF = 0x023
     private var type_flash = TYPE_FLASH_OFF
 
+    private var mCaptureMode: Int = BUTTON_STATE_BOTH
     //回调监听
     private var flowCameraListener: FlowCameraListener? = null
     private var leftClickListener: ClickListener? = null
@@ -573,6 +578,7 @@ class FlowCameraView : FrameLayout {
      * @param state
      */
     fun setCaptureMode(state: Int) {
+        mCaptureMode = state
         mCaptureLayout?.setButtonFeatures(state)
     }
 
@@ -661,13 +667,13 @@ class FlowCameraView : FrameLayout {
 
         try {
             cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(
-                lifecycleOwner!!,
-                cameraSelector,
-                videoCapture,
-                imageCapture,
-                preview
-            )
+            val useCases: List<UseCase> = when (mCaptureMode) {
+                BUTTON_STATE_BOTH -> listOf(preview, imageCapture, videoCapture)
+                BUTTON_STATE_ONLY_CAPTURE -> listOf(preview, imageCapture)
+                BUTTON_STATE_ONLY_RECORDER -> listOf(preview, videoCapture)
+                else -> listOf(preview, imageCapture, videoCapture)
+            }.filterNotNull()
+            cameraProvider.bindToLifecycle(lifecycleOwner!!, cameraSelector, *useCases.toTypedArray())
         } catch (exc: Exception) {
             // we are on main thread, let's reset the controls on the UI.
             Log.e(TAG, "Use case binding failed", exc)
