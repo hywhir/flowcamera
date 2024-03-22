@@ -67,6 +67,8 @@ class FlowCameraView2 : FrameLayout {
 
     val BUTTON_STATE_BOTH = 0x103
 
+    private var mCaptureMode: Int = BUTTON_STATE_BOTH
+
     //回调监听
     private var flowCameraListener: FlowCameraListener? = null
     private var leftClickListener: ClickListener? = null
@@ -530,9 +532,13 @@ class FlowCameraView2 : FrameLayout {
         try {
             // A variable number of use-cases can be passed here -
             // camera provides access to CameraControl & CameraInfo
-            camera = cameraProvider.bindToLifecycle(
-                lifecycleOwner!!, cameraSelector, preview, imageCapture, videoCapture
-            )
+            val useCases: List<UseCase> = when (mCaptureMode) {
+                BUTTON_STATE_BOTH -> listOf(preview, imageCapture, videoCapture)
+                BUTTON_STATE_ONLY_CAPTURE -> listOf(preview, imageCapture)
+                BUTTON_STATE_ONLY_RECORDER -> listOf(preview, videoCapture)
+                else -> listOf(preview, imageCapture, videoCapture)
+            }.filterNotNull()
+            camera = cameraProvider.bindToLifecycle(lifecycleOwner!!, cameraSelector, *useCases.toTypedArray())
 //            cameraProvider.bindToLifecycle()
 
 //            cameraProvider.bindToLifecycle(
@@ -788,6 +794,7 @@ class FlowCameraView2 : FrameLayout {
      * @param state
      */
     fun setCaptureMode(state: Int) {
+        mCaptureMode = state
         mCaptureLayout?.setButtonFeatures(state)
     }
 
